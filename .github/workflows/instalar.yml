@@ -1,0 +1,135 @@
+# Instala e mantém atualizado o Game Catalog neste repositório (GitHub Pages).
+# 1. Baixa a versão mais nova publicada em VPRODC83/gamecatalog-app.
+# 2. Confere a soma SHA-256 e o ATESTADO DE PROVENIÊNCIA: só aceita o app.zip
+#    se ele foi gerado pelo workflow oficial daquele repositório.
+# 3. Junta o seu config.json (Client ID do Google) e publica no seu GitHub Pages.
+# Roda sozinho todo dia; você também pode rodar à mão em Actions → Run workflow.
+name: Instalar ou atualizar o app
+
+on:
+  workflow_dispatch:
+    inputs:
+      google_client_id:
+        description: "Client ID do Google (só na primeira vez ou para trocar). Termina em .apps.googleusercontent.com"
+        required: false
+        default: ""
+  schedule:
+    - cron: "37 9 * * *"   # todo dia, 06:37 em Brasília
+  push:
+    branches: [main]
+    paths: [config.json]
+
+permissions:
+  contents: write      # gravar config.json e a versão instalada
+  pages: write         # publicar no GitHub Pages
+  id-token: write      # exigido pelo deploy do Pages
+  attestations: read   # ler o atestado da versão
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  FONTE: VPRODC83/gamecatalog-app
+  WORKFLOW_OFICIAL: VPRODC83/gamecatalog-app/.github/workflows/release.yml
+
+jobs:
+  instalar:
+    # o modelo original não publica nada; só as cópias dos usuários
+    if: github.repository != 'VPRODC83/gamecatalog-instalador'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Conferir se o GitHub Pages está ligado
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh api "repos/$GITHUB_REPOSITORY/pages" >/dev/null 2>&1; then
+            {
+              echo "## ❌ O GitHub Pages ainda não está ligado"
+              echo "Abra **Settings → Pages** neste repositório, em **Source** escolha **GitHub Actions** e rode este workflow de novo."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::Ligue o GitHub Pages: Settings → Pages → Source: GitHub Actions"
+            exit 1
+          fi
+
+      - name: Gravar o Client ID do Google
+        if: github.event_name == 'workflow_dispatch' && inputs.google_client_id != ''
+        env:
+          CID: ${{ inputs.google_client_id }}
+        run: |
+          set -euo pipefail
+          cid="$(printf '%s' "$CID" | tr -d '[:space:]')"
+          if ! printf '%s' "$cid" | grep -Eq '^[0-9]+-[A-Za-z0-9_]+\.apps\.googleusercontent\.com$'; then
+            echo "## ❌ Client ID inválido" >> "$GITHUB_STEP_SUMMARY"
+            echo "Ele tem o formato 123456789-abc123.apps.googleusercontent.com. Copie de novo no Google Cloud (Clientes)." >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::Client ID inválido"; exit 1
+          fi
+          printf '{"google_client_id":"%s"}\n' "$cid" > config.json
+
+      - name: Ver a versão mais nova
+        id: versao
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="$(gh release view --repo "$FONTE" --json tagName -q .tagName)"
+          atual="$(cat versao-instalada.txt 2>/dev/null || echo nenhuma)"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Versão publicada: $tag · instalada: $atual"
+          # na rotina diária, só publica se houver versão nova
+          if [ "$GITHUB_EVENT_NAME" = "schedule" ] && [ "$tag" = "$atual" ]; then echo "publicar=nao" >> "$GITHUB_OUTPUT"; else echo "publicar=sim" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Baixar e verificar a versão
+        if: steps.versao.outputs.publicar == 'sim'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.versao.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/rel && cd /tmp/rel
+          gh release download "$TAG" --repo "$FONTE" -p app.zip -p SHA256SUMS
+          sha256sum -c SHA256SUMS
+          # prova de que o arquivo foi gerado pelo workflow oficial do repositório de origem
+          gh attestation verify app.zip --repo "$FONTE" --signer-workflow "$WORKFLOW_OFICIAL"
+          rm -rf "$GITHUB_WORKSPACE/_site" && mkdir -p "$GITHUB_WORKSPACE/_site"
+          unzip -q app.zip -d "$GITHUB_WORKSPACE/_site"
+          cp "$GITHUB_WORKSPACE/config.json" "$GITHUB_WORKSPACE/_site/config.json"
+
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+        if: steps.versao.outputs.publicar == 'sim'
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        if: steps.versao.outputs.publicar == 'sim'
+        with:
+          path: _site
+      - id: deploy
+        if: steps.versao.outputs.publicar == 'sim'
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+
+      - name: Registrar a versão instalada
+        env:
+          TAG: ${{ steps.versao.outputs.tag }}
+          PUBLICAR: ${{ steps.versao.outputs.publicar }}
+          URL: ${{ steps.deploy.outputs.page_url }}
+        run: |
+          set -euo pipefail
+          [ "$PUBLICAR" = "sim" ] && echo "$TAG" > versao-instalada.txt
+          # uma linha por mês mantém o repositório "ativo" (o GitHub pausa rotinas de repositórios parados há 60 dias)
+          date -u +%Y-%m > ultima-verificacao.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A config.json versao-instalada.txt ultima-verificacao.txt
+          if ! git diff --cached --quiet; then git commit -q -m "Game Catalog ${TAG}"; git push -q; fi
+          if [ "$PUBLICAR" = "sim" ]; then
+            {
+              echo "## ✅ Game Catalog ${TAG} publicado"
+              echo "Abra no celular: ${URL}"
+              if grep -q COLE_AQUI config.json; then echo; echo "⚠️ Falta o Client ID do Google: rode este workflow de novo preenchendo o campo **Client ID do Google**."; fi
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Nenhuma versão nova. Instalada: ${TAG}" >> "$GITHUB_STEP_SUMMARY"
+          fi
