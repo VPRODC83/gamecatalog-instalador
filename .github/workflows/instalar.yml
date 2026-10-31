@@ -3,7 +3,7 @@
 # 2. Confere a soma SHA-256 e o ATESTADO DE PROVENIÊNCIA: só aceita o app.zip
 #    se ele foi gerado pelo workflow oficial daquele repositório.
 # 3. Junta o seu config.json (Client ID do Google) e publica no seu GitHub Pages.
-# Roda sozinho todo dia; você também pode rodar à mão em Actions → Run workflow.
+# Roda sozinho a cada 3 horas; você também pode rodar à mão em Actions → Run workflow.
 name: Instalar ou atualizar o app
 
 on:
@@ -14,7 +14,7 @@ on:
         required: false
         default: ""
   schedule:
-    - cron: "37 9 * * *"   # todo dia, 06:37 em Brasília
+    - cron: "37 */3 * * *"   # a cada 3 horas
   push:
     branches: [main]
     paths: [config.json]
@@ -81,7 +81,7 @@ jobs:
           atual="$(cat versao-instalada.txt 2>/dev/null || echo nenhuma)"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "Versão publicada: $tag · instalada: $atual"
-          # na rotina diária, só publica se houver versão nova
+          # na rotina automática, só publica se houver versão nova
           if [ "$GITHUB_EVENT_NAME" = "schedule" ] && [ "$tag" = "$atual" ]; then echo "publicar=nao" >> "$GITHUB_OUTPUT"; else echo "publicar=sim" >> "$GITHUB_OUTPUT"; fi
 
       - name: Baixar e verificar a versão

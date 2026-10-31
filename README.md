@@ -9,7 +9,7 @@ O Game Catalog é um app gratuito para controlar a sua coleção de videogames n
 - **Editar** os dados da planilha, sempre com confirmação antes de mudar qualquer célula.
 
 **Custo: zero.** Você usa só contas e planos gratuitos: GitHub, Google e Gemini.
-**Tempo:** uns 20 minutos, uma vez só. Depois as atualizações chegam sozinhas.
+**Tempo:** uns 20 minutos, uma vez só. Depois as atualizações chegam sozinhas, em até 3 horas após cada versão nova.
 
 ### ➜ [Criar o meu Game Catalog](https://github.com/new?template_name=gamecatalog-instalador&template_owner=VPRODC83)
 
@@ -223,7 +223,7 @@ As chaves ficam salvas **só no aparelho**. Em outro celular ou computador, cada
 
 ## Atualizações
 
-- **Automáticas:** todo dia, às 06:37, o seu repositório verifica se há versão nova no repositório oficial. Havendo, ele baixa, **confere a assinatura** e publica. Você não precisa fazer nada.
+- **Automáticas:** a cada 3 horas, o seu repositório verifica se há versão nova no repositório oficial. Havendo, ele baixa, **confere a assinatura** e publica. Você não precisa fazer nada. Quando a verificação não encontra versão nova, ela termina em poucos segundos e não publica nada.
 - **Atualizar agora:** **Actions → Instalar ou atualizar o app → Run workflow**, sem preencher o Client ID.
 - **Ver a versão instalada:** no app, em **Ajustes** (rodapé), ou no arquivo `versao-instalada.txt` do seu repositório.
 - **Pausar as atualizações:** **Actions → Instalar ou atualizar o app → ⋯ (três pontos) → Disable workflow**. Para voltar, **Enable workflow**.
