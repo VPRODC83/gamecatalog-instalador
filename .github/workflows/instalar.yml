@@ -13,11 +13,19 @@ on:
         description: "Client ID do Google (só na primeira vez ou para trocar). Termina em .apps.googleusercontent.com"
         required: false
         default: ""
+      google_api_key:
+        description: "Só para o app central (opcional): chave de API do Google para o seletor do Drive. Começa com AIza"
+        required: false
+        default: ""
+      google_project_number:
+        description: "Só para o app central (opcional): número do projeto no Google Cloud (só dígitos)"
+        required: false
+        default: ""
   schedule:
     - cron: "37 */3 * * *"   # a cada 3 horas
   push:
     branches: [main]
-    paths: [config.json]
+    paths: [config.json, "extra/**"]
 
 permissions:
   contents: write      # gravar config.json e a versão instalada
@@ -57,19 +65,25 @@ jobs:
             exit 1
           fi
 
-      - name: Gravar o Client ID do Google
-        if: github.event_name == 'workflow_dispatch' && inputs.google_client_id != ''
+      - name: Gravar a configuração do Google
+        if: github.event_name == 'workflow_dispatch' && (inputs.google_client_id != '' || inputs.google_api_key != '' || inputs.google_project_number != '')
         env:
           CID: ${{ inputs.google_client_id }}
+          KEY: ${{ inputs.google_api_key }}
+          PROJ: ${{ inputs.google_project_number }}
         run: |
           set -euo pipefail
-          cid="$(printf '%s' "$CID" | tr -d '[:space:]')"
-          if ! printf '%s' "$cid" | grep -Eq '^[0-9]+-[A-Za-z0-9_]+\.apps\.googleusercontent\.com$'; then
-            echo "## ❌ Client ID inválido" >> "$GITHUB_STEP_SUMMARY"
-            echo "Ele tem o formato 123456789-abc123.apps.googleusercontent.com. Copie de novo no Google Cloud (Clientes)." >> "$GITHUB_STEP_SUMMARY"
-            echo "::error::Client ID inválido"; exit 1
-          fi
-          printf '{"google_client_id":"%s"}\n' "$cid" > config.json
+          falha() { echo "## ❌ $1" >> "$GITHUB_STEP_SUMMARY"; echo "::error::$1"; exit 1; }
+          cid="$(printf '%s' "$CID" | tr -d '[:space:]')"; key="$(printf '%s' "$KEY" | tr -d '[:space:]')"; proj="$(printf '%s' "$PROJ" | tr -d '[:space:]')"
+          # campos vazios mantêm o valor que já estava no config.json
+          [ -z "$cid" ] && cid="$(jq -r '.google_client_id // ""' config.json)"
+          [ -z "$key" ] && key="$(jq -r '.google_api_key // ""' config.json)"
+          [ -z "$proj" ] && proj="$(jq -r '.google_project_number // ""' config.json)"
+          printf '%s' "$cid" | grep -Eq '^[0-9]+-[A-Za-z0-9_]+\.apps\.googleusercontent\.com$' || falha "Client ID inválido: ele tem o formato 123456789-abc123.apps.googleusercontent.com"
+          [ -z "$key" ] || printf '%s' "$key" | grep -Eq '^AIza[0-9A-Za-z_-]{20,}$' || falha "Chave de API inválida: ela começa com AIza"
+          [ -z "$proj" ] || printf '%s' "$proj" | grep -Eq '^[0-9]{5,}$' || falha "Número do projeto inválido: use só os dígitos"
+          jq -n --arg c "$cid" --arg k "$key" --arg p "$proj" '{google_client_id: $c} + (if $k != "" then {google_api_key: $k} else {} end) + (if $p != "" then {google_project_number: $p} else {} end)' > config.json
+          cat config.json
 
       - name: Ver a versão mais nova
         id: versao
@@ -99,6 +113,9 @@ jobs:
           rm -rf "$GITHUB_WORKSPACE/_site" && mkdir -p "$GITHUB_WORKSPACE/_site"
           unzip -q app.zip -d "$GITHUB_WORKSPACE/_site"
           cp "$GITHUB_WORKSPACE/config.json" "$GITHUB_WORKSPACE/_site/config.json"
+          # arquivos extras do dono do site (ex.: verificação do Google Search Console, .well-known/assetlinks.json)
+          if [ -d "$GITHUB_WORKSPACE/extra" ]; then cp -r "$GITHUB_WORKSPACE/extra/." "$GITHUB_WORKSPACE/_site/"; fi
+          touch "$GITHUB_WORKSPACE/_site/.nojekyll"
 
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
         if: steps.versao.outputs.publicar == 'sim'
@@ -106,6 +123,7 @@ jobs:
         if: steps.versao.outputs.publicar == 'sim'
         with:
           path: _site
+          include-hidden-files: true   # para publicar .well-known/ (ex.: assetlinks.json da Play Store)
       - id: deploy
         if: steps.versao.outputs.publicar == 'sim'
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
