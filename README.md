@@ -201,7 +201,7 @@ Essa configuração fica na própria planilha, numa aba **APP_CONFIG**. Por isso
 
 ### D5. Cadastrar a chave do Gemini (para identificar por foto)
 1. Abra [aistudio.google.com/apikey](https://aistudio.google.com/apikey) com a sua conta Google e aceite os termos.
-2. Toque em **Criar chave de API** (*Create API key*) e copie a chave (começa com `AIza…`).
+2. Toque em **Criar chave de API** (*Create API key*) e copie a chave. As chaves novas começam com `AQ.`; as antigas, com `AIza`. As duas funcionam.
 3. No app: **Ajustes** → cole em **Chave do Gemini** → **Salvar chaves** → **Testar Gemini**.
    - Se aparecer que o modelo não existe, toque em **Listar modelos** e escolha um com “flash” no nome.
 4. ⚠️ No plano gratuito, o Google pode usar o que você envia (fotos e textos) para melhorar os produtos dele. Não fotografe documentos ou nada sigiloso.
