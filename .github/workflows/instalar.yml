@@ -107,7 +107,10 @@ jobs:
           set -euo pipefail
           mkdir -p /tmp/rel && cd /tmp/rel
           gh release download "$TAG" --repo "$FONTE" -p app.zip -p SHA256SUMS
-          sha256sum -c SHA256SUMS
+          # confere só os arquivos baixados (a versão também traz o APK do Android, que o site não usa),
+          # mas exige que o app.zip esteja na lista
+          grep -qE '[[:space:]]\*?app\.zip$' SHA256SUMS || { echo "SHA256SUMS sem o app.zip"; exit 1; }
+          sha256sum -c --ignore-missing SHA256SUMS
           # prova de que o arquivo foi gerado pelo workflow oficial do repositório de origem
           gh attestation verify app.zip --repo "$FONTE" --signer-workflow "$WORKFLOW_OFICIAL"
           rm -rf "$GITHUB_WORKSPACE/_site" && mkdir -p "$GITHUB_WORKSPACE/_site"
